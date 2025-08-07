@@ -1,0 +1,23 @@
+{
+  "name": "instagram-feed-api",
+  "version": "1.0.0",
+  "description": "Instagram feed API for Shopify theme",
+  "main": "index.js",
+  "scripts": {
+    "dev": "vercel dev",
+    "build": "echo 'No build step required'",
+    "start": "vercel dev"
+  },
+  "keywords": [
+    "instagram",
+    "api",
+    "shopify",
+    "vercel"
+  ],
+  "author": "Cubs Go Places",
+  "license": "MIT",
+  "dependencies": {},
+  "devDependencies": {
+    "vercel": "^32.0.0"
+  }
+}
