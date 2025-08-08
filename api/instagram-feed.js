@@ -1,7 +1,7 @@
 // /api/instagram-feed.js
 // Vercel API endpoint for Instagram feed scraping
 
-export default async function handler(req, res) {
+module.exports = async function handler(req, res) {
   // Enable CORS for cross-origin requests
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
@@ -17,6 +17,24 @@ export default async function handler(req, res) {
   if (req.method !== 'GET') {
     return res.status(405).json({ error: 'Method not allowed' });
   }
+
+  // Parse query params (for diagnostics/testing)
+  try {
+    const urlObj = new URL(req.url, 'http://localhost');
+    const test = urlObj.searchParams.get('test');
+    if (test === '1') {
+      res.setHeader('Cache-Control', 'no-cache');
+      return res.status(200).json([
+        {
+          image: 'https://via.placeholder.com/400x400/8BC0B2/FFFFFF?text=Instagram+Post',
+          caption: 'Test mode: fallback data',
+          link: `https://www.instagram.com/cubsgulf/`,
+          likes: 0,
+          comments: 0
+        }
+      ]);
+    }
+  } catch (_) {}
 
   const username = 'cubsgulf'; // Replace with your Instagram handle
   const url = `https://www.instagram.com/${username}/`;
@@ -35,6 +53,7 @@ export default async function handler(req, res) {
     });
 
     if (!response.ok) {
+      console.error('Fetch failed', { status: response.status, statusText: response.statusText });
       throw new Error(`HTTP error! status: ${response.status}`);
     }
 
