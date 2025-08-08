@@ -36,102 +36,37 @@ module.exports = async function handler(req, res) {
     }
   } catch (_) {}
 
-  const username = 'cubsgulf'; // Replace with your Instagram handle
-  const url = `https://www.instagram.com/${username}/`;
-
+  const username = 'cubsgulf';
+  
   try {
-    // Fetch Instagram page
-    const response = await fetch(url, {
-      headers: {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
-        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
-        'Accept-Language': 'en-US,en;q=0.5',
-        'Accept-Encoding': 'gzip, deflate',
-        'Connection': 'keep-alive',
-        'Upgrade-Insecure-Requests': '1',
-      },
-    });
-
-    if (!response.ok) {
-      console.error('Fetch failed', { status: response.status, statusText: response.statusText });
-      throw new Error(`HTTP error! status: ${response.status}`);
+    // Method 1: Try Instagram's newer API structure
+    let posts = await tryNewInstagramAPI(username);
+    
+    if (!posts || posts.length === 0) {
+      // Method 2: Try scraping the profile page
+      posts = await tryScrapeProfilePage(username);
+    }
+    
+    if (!posts || posts.length === 0) {
+      // Method 3: Try alternative data extraction
+      posts = await tryAlternativeExtraction(username);
     }
 
-    const html = await response.text();
+    if (posts && posts.length > 0) {
+      // Transform and return posts
+      const transformedPosts = posts.slice(0, 9).map(post => ({
+        image: post.image || post.thumbnail_src || post.display_url || post.media_url,
+        caption: post.caption || post.text || '',
+        link: post.link || `https://www.instagram.com/p/${post.shortcode}/`,
+        likes: post.likes || post.edge_liked_by?.count || 0,
+        comments: post.comments || post.edge_media_to_comment?.count || 0
+      }));
 
-    // Extract JSON data from Instagram page
-    const jsonMatch = html.match(/window\._sharedData\s*=\s*({.+?});/);
-    
-    if (!jsonMatch) {
-      // Fallback: try to find alternative data structure
-      const alternativeMatch = html.match(/<script type="text\/javascript">window\._sharedData = ({.+?});<\/script>/);
-      
-      if (!alternativeMatch) {
-        throw new Error('Could not extract Instagram data');
-      }
-      
-      var json = JSON.parse(alternativeMatch[1]);
-    } else {
-      var json = JSON.parse(jsonMatch[1]);
-    }
-
-    // Extract posts from the JSON data
-    let posts = [];
-    
-    try {
-      // Try different possible data structures
-      if (json.entry_data?.ProfilePage?.[0]?.graphql?.user?.edge_owner_to_timeline_media?.edges) {
-        posts = json.entry_data.ProfilePage[0].graphql.user.edge_owner_to_timeline_media.edges;
-      } else if (json.entry_data?.ProfilePage?.[0]?.graphql?.user?.edge_web_discover_media?.edges) {
-        posts = json.entry_data.ProfilePage[0].graphql.user.edge_web_discover_media.edges;
-      } else {
-        throw new Error('No posts found in Instagram data');
-      }
-
-      // Transform posts to our format
-      const transformedPosts = posts.slice(0, 9).map(post => {
-        const node = post.node;
-        return {
-          image: node.thumbnail_src || node.display_url || node.media_url,
-          caption: node.edge_media_to_caption?.edges?.[0]?.node?.text || '',
-          link: `https://www.instagram.com/p/${node.shortcode}/`,
-          likes: node.edge_liked_by?.count || 0,
-          comments: node.edge_media_to_comment?.count || 0
-        };
-      });
-
-      // Set cache headers (1 hour)
       res.setHeader('Cache-Control', 's-maxage=3600, stale-while-revalidate');
-      res.status(200).json(transformedPosts);
-
-    } catch (parseError) {
-      console.error('Error parsing Instagram data:', parseError);
-      
-      // Return fallback data if parsing fails
-      res.status(200).json([
-        {
-          image: 'https://via.placeholder.com/400x400/8BC0B2/FFFFFF?text=Instagram+Post',
-          caption: 'Follow us on Instagram @cubsgulf',
-          link: `https://www.instagram.com/${username}/`,
-          likes: 0,
-          comments: 0
-        },
-        {
-          image: 'https://via.placeholder.com/400x400/EDC821/FFFFFF?text=Instagram+Post',
-          caption: 'Stay inspired with our latest posts',
-          link: `https://www.instagram.com/${username}/`,
-          likes: 0,
-          comments: 0
-        },
-        {
-          image: 'https://via.placeholder.com/400x400/E4405F/FFFFFF?text=Instagram+Post',
-          caption: 'Discover amazing products and stories',
-          link: `https://www.instagram.com/${username}/`,
-          likes: 0,
-          comments: 0
-        }
-      ]);
+      return res.status(200).json(transformedPosts);
     }
+
+    throw new Error('No posts found from any method');
 
   } catch (error) {
     console.error('Error fetching Instagram feed:', error);
@@ -161,4 +96,130 @@ module.exports = async function handler(req, res) {
       }
     ]);
   }
+};
+
+// Method 1: Try Instagram's newer API structure
+async function tryNewInstagramAPI(username) {
+  try {
+    const response = await fetch(`https://www.instagram.com/${username}/?__a=1&__d=dis`, {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        'Accept': 'application/json, text/plain, */*',
+        'Accept-Language': 'en-US,en;q=0.9',
+        'Accept-Encoding': 'gzip, deflate, br',
+        'Connection': 'keep-alive',
+        'Sec-Fetch-Dest': 'empty',
+        'Sec-Fetch-Mode': 'cors',
+        'Sec-Fetch-Site': 'same-origin',
+        'X-Requested-With': 'XMLHttpRequest',
+        'X-IG-App-ID': '936619743392459',
+        'X-IG-WWW-Claim': '0',
+        'X-ASBD-ID': '129477',
+        'X-CSRFToken': 'missing',
+        'X-Instagram-AJAX': '1006632969',
+      },
+    });
+
+    if (response.ok) {
+      const data = await response.json();
+      if (data?.graphql?.user?.edge_owner_to_timeline_media?.edges) {
+        return data.graphql.user.edge_owner_to_timeline_media.edges.map(edge => edge.node);
+      }
+    }
+  } catch (error) {
+    console.log('New API method failed:', error.message);
+  }
+  return null;
+}
+
+// Method 2: Try scraping the profile page
+async function tryScrapeProfilePage(username) {
+  try {
+    const response = await fetch(`https://www.instagram.com/${username}/`, {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,image/apng,*/*;q=0.8',
+        'Accept-Language': 'en-US,en;q=0.9',
+        'Accept-Encoding': 'gzip, deflate, br',
+        'Connection': 'keep-alive',
+        'Upgrade-Insecure-Requests': '1',
+        'Sec-Fetch-Dest': 'document',
+        'Sec-Fetch-Mode': 'navigate',
+        'Sec-Fetch-Site': 'none',
+        'Cache-Control': 'max-age=0',
+      },
+    });
+
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
+
+    const html = await response.text();
+    
+    // Try multiple data extraction patterns
+    const patterns = [
+      /window\._sharedData\s*=\s*({.+?});/,
+      /<script type="text\/javascript">window\._sharedData = ({.+?});<\/script>/,
+      /window\.__additionalDataLoaded\s*\(\s*[^,]+,\s*({.+?})\s*\)/,
+      /"entry_data":\s*({.+?})\s*,\s*"hostname"/,
+    ];
+
+    for (const pattern of patterns) {
+      const match = html.match(pattern);
+      if (match) {
+        try {
+          const json = JSON.parse(match[1]);
+          if (json.entry_data?.ProfilePage?.[0]?.graphql?.user?.edge_owner_to_timeline_media?.edges) {
+            return json.entry_data.ProfilePage[0].graphql.user.edge_owner_to_timeline_media.edges.map(edge => edge.node);
+          }
+        } catch (parseError) {
+          console.log('Pattern parse failed:', parseError.message);
+        }
+      }
+    }
+  } catch (error) {
+    console.log('Profile scraping failed:', error.message);
+  }
+  return null;
+}
+
+// Method 3: Try alternative data extraction
+async function tryAlternativeExtraction(username) {
+  try {
+    // Try Instagram's JSON-LD structured data
+    const response = await fetch(`https://www.instagram.com/${username}/`, {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+      },
+    });
+
+    if (response.ok) {
+      const html = await response.text();
+      
+      // Look for JSON-LD structured data
+      const jsonLdMatch = html.match(/<script type="application\/ld\+json">({.+?})<\/script>/);
+      if (jsonLdMatch) {
+        try {
+          const jsonLd = JSON.parse(jsonLdMatch[1]);
+          if (jsonLd.mainEntityofPage && jsonLd.mainEntityofPage.interactionStatistic) {
+            // Extract basic profile info and create placeholder posts
+            return [
+              {
+                image: `https://www.instagram.com/${username}/media/?size=l`,
+                caption: `Follow @${username} on Instagram`,
+                link: `https://www.instagram.com/${username}/`,
+                likes: 0,
+                comments: 0
+              }
+            ];
+          }
+        } catch (parseError) {
+          console.log('JSON-LD parse failed:', parseError.message);
+        }
+      }
+    }
+  } catch (error) {
+    console.log('Alternative extraction failed:', error.message);
+  }
+  return null;
 }
